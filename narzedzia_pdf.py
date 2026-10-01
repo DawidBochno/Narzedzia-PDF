@@ -63,6 +63,7 @@ def _open(path):
         return doc
     doc = pymupdf.open(path)
     if doc.needs_pass:
+        doc.close()
         raise ValueError("plik zabezpieczony haslem")
     return doc
 
@@ -71,6 +72,16 @@ def _save(doc, dst):
     doc.save(dst, garbage=4, deflate=True)
     doc.close()
     return dst
+
+
+def _int(value, default, lo, hi, what):
+    try:
+        v = int(value or default)
+    except ValueError:
+        v = None
+    if v is None or not lo <= v <= hi:
+        raise ValueError("%s: podaj liczbe od %d do %d" % (what, lo, hi))
+    return v
 
 
 def _out(out_dir, src, suffix):
@@ -120,7 +131,7 @@ def op_delete(f, out_dir, pages, value, log):
 
 
 def op_rotate(f, out_dir, pages, value, log):
-    angle = int(value or 90)
+    angle = _int(value, 90, -270, 270, "kat")
     if angle % 90:
         raise ValueError("kat musi byc wielokrotnoscia 90")
     src = _open(f)
@@ -130,7 +141,7 @@ def op_rotate(f, out_dir, pages, value, log):
 
 
 def op_compress(f, out_dir, pages, value, log):
-    quality = int(value or 60)
+    quality = _int(value, 60, 1, 100, "jakosc")
     src = _open(f)
     src.rewrite_images(dpi_threshold=200, dpi_target=150, quality=quality)
     dst = _out(out_dir, f, "_skompresowany")
@@ -379,6 +390,10 @@ def selftest():
     r = run("Usun strony", src, out, "2-4", log=quiet)
     assert len(pages_of(r[0])) == 2
     assert run("Usun strony", src, out, "1-5", log=quiet) == []
+    msgs = []
+    assert run("Kompresuj", src, out, "", "abc", log=msgs.append) == []
+    assert "jakosc: podaj liczbe od 1 do 100" in "".join(msgs), msgs
+    assert run("Obroc", src, out, "", "45", log=quiet) == []
     r = run("Obroc", src, out, "2", "90", log=quiet)
     with pymupdf.open(r[0]) as x:
         assert [p.rotation for p in x] == [0, 90, 0, 0, 0]
