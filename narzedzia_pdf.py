@@ -343,6 +343,8 @@ def gui():
     btn.config(command=start)
     if "--selftest" in sys.argv:
         root.after(200, root.destroy)
+    import aktualizacja
+    aktualizacja.start(root, "DawidBochno/Narzedzia-PDF", "main", "narzedzia_pdf.py")
     root.mainloop()
 
 
@@ -403,6 +405,8 @@ def selftest():
     assert "NIEWAŻNE" in pages_of(r[0])[0]
     r = run("Kompresuj", os.path.join(out, os.listdir(out)[0]), out, log=quiet)
     assert len(r) == 1
+    import aktualizacja
+    aktualizacja.selftest()
     print("selftest OK")
 
 
