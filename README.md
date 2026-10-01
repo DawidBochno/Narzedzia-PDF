@@ -4,6 +4,8 @@ Program **lokalny** — działa w całości na Twoim komputerze i nigdzie nie
 wysyła plików. Zastępuje internetowe serwisy typu „połącz PDF online”, do
 których trafiają dokumenty z danymi osobowymi.
 
+![Okno programu](docs/okno.png)
+
 ## Operacje
 
 | Operacja | Pole „Strony” | Pole „Wartość” | Wynik |
@@ -38,14 +40,50 @@ plików przyciskiem **Pliki…** kolejność ustala okno wyboru.
 - **Oryginały nigdy nie są zmieniane.** Wyniki trafiają do folderu
   wyjściowego.
 
-## Szybki start
+## Instalacja (jednorazowo)
 
-1. `install.bat` — instaluje bibliotekę `PyMuPDF` i uruchamia self-test.
-2. Wrzuć pliki do folderu `INPUT` albo wskaż je przyciskiem **Pliki…**.
-3. `uruchom.bat` → wybierz operację → **Wykonaj**.
-4. Wyniki są w folderze `OUTPUT`.
+1. **Python** — pobierz z [python.org](https://www.python.org/downloads/windows/)
+   (wersja 3.9 lub nowsza). W instalatorze zaznacz **„Add python.exe to PATH”**.
+   Opcja „tcl/tk and IDLE” jest zaznaczona domyślnie i musi taka zostać.
+   Uprawnienia administratora nie są potrzebne.
+2. **Program** — na stronie [github.com/DawidBochno/Narzedzia-PDF](https://github.com/DawidBochno/Narzedzia-PDF)
+   kliknij zielony przycisk **Code → Download ZIP**. Rozpakuj archiwum,
+   np. do `C:\Programy\Narzedzia PDF`. Nie uruchamiaj programu z wnętrza ZIP-a.
+3. Kliknij dwukrotnie **`install.bat`**. Instaluje bibliotekę `PyMuPDF` (potrzebny internet) i uruchamia test. Na końcu pojawia się
+   **„selftest OK”**, co znaczy, że wszystko działa.
+   Jeśli Windows pokaże „System Windows ochronił ten komputer”, kliknij
+   **Więcej informacji → Uruchom mimo to**.
+4. Program uruchamia się plikiem **`uruchom.bat`**. Wygodnie jest zrobić
+   skrót na pulpicie: prawy przycisk na `uruchom.bat` → **Wyślij do →
+   Pulpit (utwórz skrót)**.
 
-Wymaga Pythona 3.9+ z opcjami „Add python.exe to PATH” i „tcl/tk and IDLE”.
+## Jak używać
+
+1. Uruchom `uruchom.bat`.
+2. **Operacja** — wybierz z listy, co zrobić (tabela [Operacje](#operacje)).
+3. **Pliki lub folder** — **Pliki…** pozwala zaznaczyć kilka plików
+   naraz (z Ctrl), **Folder…** bierze wszystkie pliki z folderu.
+4. **Strony** i **Wartość** — wypełnij, jeśli operacja ich potrzebuje,
+   np. `1-3,5` przy wyborze stron albo `90` przy obracaniu. Puste pole
+   oznacza wartość domyślną.
+5. Kliknij **Wykonaj**. Wyniki trafiają do folderu wyjściowego
+   (domyślnie `OUTPUT`), a oryginały zostają bez zmian.
+
+## Aktualizacje
+
+Po uruchomieniu program sprawdza w tle na GitHubie, czy jest nowa wersja.
+Jeśli jest, pyta **„Pobrać i zainstalować teraz?”**. Pobierane są tylko
+zmienione pliki programu. Foldery `INPUT`, `OUTPUT`, ustawienia i pliki
+w `przyklad/` nie są nadpisywane. Po aktualizacji zamknij i uruchom program ponownie. Jeśli program
+o to poprosi, uruchom też raz `install.bat` (zmieniły się biblioteki).
+
+- Do GitHuba trafia tylko zapytanie o listę plików programu, **nigdy
+  dokumenty ani dane**.
+- Bez internetu albo przy blokadzie (np. UTM) program działa normalnie,
+  bez żadnego komunikatu.
+- **Wyłączenie** (np. gdy programy aktualizuje dział IT): utwórz w folderze
+  programu pusty plik o nazwie `NIE_AKTUALIZUJ`.
+- Kopię pobraną przez `git clone` aktualizuje się poleceniem `git pull`.
 
 ## Ograniczenia
 
