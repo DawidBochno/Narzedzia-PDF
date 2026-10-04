@@ -8,6 +8,7 @@ Uruchomienie: python narzedzia_pdf.py            (GUI)
 """
 import os
 import re
+import shutil
 import sys
 import threading
 import time
@@ -405,6 +406,10 @@ def selftest():
     assert "NIEWAŻNE" in pages_of(r[0])[0]
     r = run("Kompresuj", os.path.join(out, os.listdir(out)[0]), out, log=quiet)
     assert len(r) == 1
+    # drugi raz ten sam plik: wynik nie bylby mniejszy -> kopia bez zmian
+    msgs = []
+    r2 = run("Kompresuj", r[0], os.path.join(out, "2"), log=msgs.append)
+    assert len(r2) == 1 and "zapisano kopie bez zmian" in "".join(msgs), msgs
     import aktualizacja
     aktualizacja.selftest()
     print("selftest OK")
