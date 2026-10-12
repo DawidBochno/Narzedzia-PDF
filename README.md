@@ -69,13 +69,18 @@ Dodany folder trafia na listę jako jego pliki, alfabetycznie.
      alfabetycznie.
    - **Usuń z listy** (lub klawisz Delete) i **Wyczyść listę** nie
      kasują plików z dysku.
-   - Dwuklik na pliku otwiera go do podglądu.
+   - Po zaznaczeniu pliku obok listy widać **podgląd jego pierwszej
+     strony**, a dwuklik otwiera cały plik.
 4. **Strony** i **Wartość** — wypełnij, jeśli operacja ich potrzebuje,
    np. `1-3,5` przy wyborze stron albo `90` przy obracaniu. Puste pole
    oznacza wartość domyślną.
 5. Kliknij **Wykonaj**. Wyniki trafiają do folderu wyjściowego
    (domyślnie `OUTPUT`), a oryginały zostają bez zmian. Przycisk
    **Otwórz folder wyników** otwiera ten folder w Eksploratorze.
+
+Program zapamiętuje ostatnią operację, folder wyjściowy i rozmiar okna
+(plik `ustawienia.json` w folderze programu; usunięcie go przywraca
+ustawienia domyślne).
 
 ## Aktualizacje
 
