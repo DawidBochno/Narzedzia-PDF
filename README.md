@@ -11,6 +11,7 @@ których trafiają dokumenty z danymi osobowymi.
 | Operacja | Pole „Strony” | Pole „Wartość” | Wynik |
 |----------|---------------|----------------|-------|
 | **Połącz (PDF, JPG, PNG)** | – | nazwa pliku wynikowego (puste = data i godzina) | `polaczony_RRRRMMDD_GGMMSS.pdf` lub podana nazwa |
+| **Połącz i usuń podpisy** | – | jak wyżej | jak wyżej, bez podpisów elektronicznych |
 | **Podziel** | `1-3,4-6` → dwa pliki; puste → każda strona osobno | – | `nazwa_str1-3.pdf`, … |
 | **Wybierz strony** | `1,3,5-7` (w podanej kolejności) | – | `nazwa_wybrane.pdf` |
 | **Usuń strony** | `2,5-6` | – | `nazwa_bez_stron.pdf` |
@@ -48,6 +49,11 @@ Dodany folder trafia na listę jako jego pliki, alfabetycznie.
 - **Usuń podpisy** usuwa pola podpisu (razem z ich widocznym wyglądem)
   i dane walidacyjne. Przydaje się po połączeniu podpisanych plików:
   walidator pokaże wtedy dokument bez podpisu zamiast podpisu nieważnego.
+- **Połącz i usuń podpisy** robi to w jednym kroku: łączy pliki i usuwa
+  z wyniku podpisy, które po połączeniu i tak byłyby nieważne. Tak samo
+  działa łączenie w serwisach typu iLovePDF (sprawdzone: wynik nie ma
+  żadnego podpisu). **Wynik nie jest podpisany.** Jeśli odbiorca wymaga
+  podpisu, podpisz połączony plik ponownie albo wyślij oryginały osobno.
 - **Oryginały nigdy nie są zmieniane.** Wyniki trafiają do folderu
   wyjściowego.
 

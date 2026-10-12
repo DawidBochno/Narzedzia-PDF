@@ -93,7 +93,7 @@ def _out(out_dir, src, suffix):
     return os.path.join(out_dir, os.path.splitext(os.path.basename(src))[0] + suffix + ".pdf")
 
 
-def op_merge(files, out_dir, pages, value, log):
+def op_merge(files, out_dir, pages, value, log, unsign=False):
     import pymupdf
     out = pymupdf.open()
     for f in files:
@@ -101,12 +101,18 @@ def op_merge(files, out_dir, pages, value, log):
         out.insert_pdf(src)
         log("  + %s (%d str.)" % (os.path.basename(f), len(src)))
         src.close()
+    if unsign:
+        log("  usunieto pol podpisu: %d - wynik NIE jest podpisany" % _strip_sigs(out))
     name = re.sub(r'[\\/:*?"<>|]', "_", re.sub(r"(?i)\.pdf$", "", value)).strip(" .")
     name = name or "polaczony_%s" % time.strftime("%Y%m%d_%H%M%S")
     dst, k = os.path.join(out_dir, name + ".pdf"), 2
     while os.path.exists(dst):  # nazwa od uzytkownika - nie nadpisywac (np. oryginalu w tym samym folderze)
         dst, k = os.path.join(out_dir, "%s_%d.pdf" % (name, k)), k + 1
     return [_save(out, dst)]
+
+
+def op_merge_unsign(files, out_dir, pages, value, log):
+    return op_merge(files, out_dir, pages, value, log, unsign=True)
 
 
 def op_split(f, out_dir, pages, value, log):
@@ -208,23 +214,29 @@ def op_show_sigs(f, out_dir, pages, value, log):
     return []
 
 
-def op_unsign(f, out_dir, pages, value, log):
+def _strip_sigs(doc):
+    """Usuwa pola podpisu (z wygladem) i dane walidacyjne; zwraca liczbe usunietych pol."""
     import pymupdf
-    src = _open(f)
     n = 0
-    for page in src:
+    for page in doc:
         while True:  # usuwanie w trakcie iteracji widgets() psuje iterator - zawsze pierwszy od nowa
             w = next(page.widgets(types=[pymupdf.PDF_WIDGET_TYPE_SIGNATURE]), None)
             if not w:
                 break
             page.delete_widget(w)
             n += 1
+    cat = doc.pdf_catalog()
+    for key in ("DSS", "Perms", "AcroForm/SigFlags"):  # dane walidacji (LTV), certyfikacja DocMDP, flaga podpisu
+        doc.xref_set_key(cat, key, "null")
+    return n
+
+
+def op_unsign(f, out_dir, pages, value, log):
+    src = _open(f)
+    n = _strip_sigs(src)
     if not n:
         src.close()
         raise ValueError("brak podpisow w pliku")
-    cat = src.pdf_catalog()
-    for key in ("DSS", "Perms", "AcroForm/SigFlags"):  # dane walidacji (LTV), certyfikacja DocMDP, flaga podpisu
-        src.xref_set_key(cat, key, "null")
     log("  usunieto pol podpisu: %d" % n)
     return [_save(src, _out(out_dir, f, "_bez_podpisow"))]
 
@@ -248,6 +260,7 @@ def op_watermark(f, out_dir, pages, value, log):
 # nazwa: (funkcja, czy laczy wiele plikow, podpowiedz "Strony", podpowiedz "Wartosc")
 OPS = {
     "Polacz (PDF, JPG, PNG)": (op_merge, True, "-", "nazwa pliku wynikowego (puste = polaczony_data_godzina)"),
+    "Polacz i usun podpisy": (op_merge_unsign, True, "-", "nazwa pliku wynikowego (puste = polaczony_data_godzina)"),
     "Podziel": (op_split, False, "np. 1-3,4-6 (puste = kazda strona osobno)", "-"),
     "Wybierz strony": (op_select, False, "np. 1,3,5-7 (w podanej kolejnosci)", "-"),
     "Usun strony": (op_delete, False, "np. 2,5-6", "-"),
@@ -412,7 +425,7 @@ def run(op, inp, out_dir, pages="", value="", log=print):
         log("Brak plikow do przetworzenia.")
         return []
     os.makedirs(out_dir, exist_ok=True)
-    sig = [os.path.basename(f) for f in files if func not in (op_show_sigs, op_unsign) and signed(f)]
+    sig = [os.path.basename(f) for f in files if func not in (op_show_sigs, op_unsign, op_merge_unsign) and signed(f)]
     if sig:
         log(SIGN_WARN % ", ".join(sig))
     jobs = [files] if merge else files
@@ -608,11 +621,12 @@ def gui():
 
     def on_op(*_):
         _, _, hp, hv = OPS[v_op.get()]
+        if str(h_value.cget("text")) != hv:  # inne znaczenie pola: np. kat 90 z Obroc nie moze zostac nazwa pliku
+            v_value.set("")
         h_pages.config(text=hp)
         h_value.config(text=hv)
         e_pages.config(state="disabled" if hp == "-" else "normal")
         e_value.config(state="disabled" if hv == "-" else "normal")
-        v_value.set("")  # np. kat 90 z Obroc nie moze zostac nazwa pliku przy Polacz
 
     v_op.trace_add("write", on_op)
     on_op()
@@ -781,6 +795,11 @@ def selftest():
     assert run("Wyswietl podpisy", [ex, src], out, log=msgs.append) == []
     text = "\n".join(msgs)
     assert "NIEZMIENIONA" in text and "brak podpisow" in text and "UWAGA" not in text, text
+    msgs = []
+    r2 = run("Polacz i usun podpisy", [src, ex], out, value="bez", log=msgs.append)
+    assert signatures(r2[0]) == [] and len(pages_of(r2[0])) == 6, r2
+    text = "\n".join(msgs)
+    assert "usunieto pol podpisu: 1 - wynik NIE jest podpisany" in text and "UWAGA" not in text, text
     r = run("Usun podpisy", [r[0], src], out, log=quiet)
     assert len(r) == 1 and signatures(r[0]) == [] and not signed(r[0]) and len(pages_of(r[0])) == 6
     png = thumbnail(src)
