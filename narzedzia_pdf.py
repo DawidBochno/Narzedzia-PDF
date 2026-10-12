@@ -6,6 +6,8 @@ stron, obracanie, kompresja, numeracja stron, znak wodny. Wszystko lokalnie
 Uruchomienie: python narzedzia_pdf.py            (GUI)
               python narzedzia_pdf.py --selftest (test logiki)
 """
+import base64
+import json
 import os
 import re
 import shutil
@@ -18,6 +20,7 @@ if getattr(sys, "frozen", False):
     APP_DIR = os.path.dirname(sys.executable)
 else:
     APP_DIR = os.path.dirname(os.path.abspath(__file__))
+SETTINGS = os.path.join(APP_DIR, "ustawienia.json")  # ostatnia operacja, folder wyjsciowy, rozmiar okna
 
 IMAGES = (".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff")
 # czcionka z polskimi znakami do numeracji i znaku wodnego (wbudowana Helvetica ich nie ma)
@@ -233,6 +236,33 @@ def page_count(path):
     return n
 
 
+def thumbnail(path, size=220):
+    """PNG pierwszej strony, dluzszy bok = size px (podglad w oknie)."""
+    import pymupdf
+    doc = _open(path)
+    page = doc[0]
+    z = size / max(page.rect.width, page.rect.height)
+    png = page.get_pixmap(matrix=pymupdf.Matrix(z, z)).tobytes("png")
+    doc.close()
+    return png
+
+
+def load_settings(path=SETTINGS):
+    try:
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
+def save_settings(data, path=SETTINGS):
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=1)
+    except OSError:  # np. folder tylko do odczytu - ustawienia nie sa niezbedne
+        pass
+
+
 def run(op, inp, out_dir, pages="", value="", log=print):
     func, merge, _, _ = OPS[op]
     files = list_inputs(inp, merge)
@@ -268,11 +298,12 @@ def gui():
     except ImportError:
         root, DND_FILES = tk.Tk(), None
     root.title("Narzedzia PDF")
-    root.geometry("820x700")
+    cfg = load_settings()
+    root.geometry(cfg.get("size", "1040x720"))  # sam rozmiar - pozycja mogla byc na odlaczonym monitorze
     pad = dict(padx=6, pady=3)
 
-    v_op = tk.StringVar(value=next(iter(OPS)))
-    v_out = tk.StringVar(value=os.path.join(APP_DIR, "OUTPUT"))
+    v_op = tk.StringVar(value=cfg.get("op") if cfg.get("op") in OPS else next(iter(OPS)))
+    v_out = tk.StringVar(value=cfg.get("out") or os.path.join(APP_DIR, "OUTPUT"))
     v_pages, v_value = tk.StringVar(), tk.StringVar()
     items, counts = [], {}  # pliki na liscie (kolejnosc = kolejnosc laczenia), liczba stron
 
@@ -292,7 +323,25 @@ def gui():
     sb.pack(side="left", fill="y", pady=6)
     side = ttk.Frame(lf)
     side.pack(side="left", fill="y", padx=6, pady=6)
+    box = ttk.Frame(lf, width=230, height=230, relief="groove")
+    box.pack(side="left", anchor="n", padx=6, pady=6)
+    box.pack_propagate(False)  # staly rozmiar - okno nie skacze przy zmianie podgladu
+    preview = ttk.Label(box, anchor="center", justify="center", foreground="#666")
+    preview.pack(fill="both", expand=True)
+    thumbs = {}
     status = ttk.Label(root, foreground="#666")
+
+    def show_preview(*_):
+        sel = lb.curselection()
+        if not sel:
+            return preview.config(image="", text="Podglad pierwszej strony:\nzaznacz plik na liscie")
+        p = items[sel[0]]
+        if p not in thumbs:
+            try:
+                thumbs[p] = tk.PhotoImage(data=base64.b64encode(thumbnail(p)))
+            except Exception:
+                thumbs[p] = None
+        preview.config(image=thumbs[p] or "", text="" if thumbs[p] else "Brak podgladu")
 
     def refresh(select=()):
         lb.delete(0, "end")
@@ -305,6 +354,7 @@ def gui():
         total = sum(c for c in counts.values() if c != "?")
         status.config(text="Plikow: %d, stron razem: %d" % (len(items), total) if items else
                       "Lista jest pusta - dodaj pliki przyciskiem lub przeciagnij je na liste.")
+        show_preview()
 
     def add(paths):
         skipped = []
@@ -364,6 +414,7 @@ def gui():
     lb.bind("<B1-Motion>", on_motion)
     lb.bind("<Double-Button-1>", open_item)
     lb.bind("<Delete>", remove)
+    lb.bind("<<ListboxSelect>>", show_preview)
     if DND_FILES:
         for w in (lb, lf):
             w.drop_target_register(DND_FILES)
@@ -457,6 +508,13 @@ def gui():
         threading.Thread(target=work, daemon=True).start()
 
     btn.config(command=start)
+
+    def on_close():
+        save_settings({"op": v_op.get(), "out": v_out.get(),
+                       "size": "%dx%d" % (root.winfo_width(), root.winfo_height())})
+        root.destroy()
+
+    root.protocol("WM_DELETE_WINDOW", on_close)
     add([in_dir] if os.path.isdir(in_dir) else [])  # dotychczasowy sposob: pliki wrzucone do INPUT
     if "--selftest" in sys.argv:
         root.after(200, root.destroy)
@@ -533,6 +591,16 @@ def selftest():
     msgs = []
     r2 = run("Kompresuj", r[0], os.path.join(out, "2"), log=msgs.append)
     assert len(r2) == 1 and "zapisano kopie bez zmian" in "".join(msgs), msgs
+    png = thumbnail(src)
+    pix = pymupdf.Pixmap(png)
+    assert png[:8] == b"\x89PNG\r\n\x1a\n" and max(pix.width, pix.height) == 220
+    assert thumbnail(img)[:4] == b"\x89PNG"
+    cfg = os.path.join(tmp, "ustawienia.json")
+    assert load_settings(cfg) == {}
+    save_settings({"op": "Obroc", "out": "C:\\Wyniki ąę"}, cfg)
+    assert load_settings(cfg) == {"op": "Obroc", "out": "C:\\Wyniki ąę"}
+    open(cfg, "w").write("{zepsuty")
+    assert load_settings(cfg) == {}
     import aktualizacja
     aktualizacja.selftest()
     print("selftest OK")

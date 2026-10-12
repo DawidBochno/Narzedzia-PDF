@@ -8,3 +8,4 @@ OUTPUT/*
 !INPUT/.gitkeep
 !OUTPUT/.gitkeep
 pliki testowe/
+ustawienia.json
