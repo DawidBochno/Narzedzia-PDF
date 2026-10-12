@@ -140,4 +140,14 @@ python narzedzia_pdf.py --selftest
 
 Test sprawdza parsowanie zakresów stron (także błędnych) i każdą operację
 na wygenerowanym PDF-ie, w tym łączenie PDF z obrazem PNG i polskie znaki
-w znaku wodnym.
+w znaku wodnym. Ponadto:
+
+- łączenie w kolejności z listy, nazwę pliku wynikowego i to, że istniejący
+  plik nie zostanie nadpisany,
+- podgląd pierwszej strony oraz zapis i odczyt ustawień (także uszkodzonego pliku),
+- podpisy na `przyklad/podpisany_przyklad.pdf`: odczyt podpisującego,
+  unieważnienie przez łączenie, ostrzeżenia, „Usuń podpisy” i
+  „Połącz i usuń podpisy”.
+
+`--selftest --gui` dodatkowo otwiera okno i zamyka je po 200 ms. Tak samo
+uruchamia go CI na GitHubie (Python 3.11 i 3.13).
