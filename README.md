@@ -10,7 +10,7 @@ których trafiają dokumenty z danymi osobowymi.
 
 | Operacja | Pole „Strony” | Pole „Wartość” | Wynik |
 |----------|---------------|----------------|-------|
-| **Połącz (PDF, JPG, PNG)** | – | – | `polaczony_RRRRMMDD_GGMMSS.pdf` |
+| **Połącz (PDF, JPG, PNG)** | – | nazwa pliku wynikowego (puste = data i godzina) | `polaczony_RRRRMMDD_GGMMSS.pdf` lub podana nazwa |
 | **Podziel** | `1-3,4-6` → dwa pliki; puste → każda strona osobno | – | `nazwa_str1-3.pdf`, … |
 | **Wybierz strony** | `1,3,5-7` (w podanej kolejności) | – | `nazwa_wybrane.pdf` |
 | **Usuń strony** | `2,5-6` | – | `nazwa_bez_stron.pdf` |
@@ -22,10 +22,9 @@ których trafiają dokumenty z danymi osobowymi.
 Zakresy stron: `1-3` (od 1 do 3), `5` (jedna strona), `8-` (od 8 do końca),
 `-4` (od początku do 4), łączone przecinkiem. Strony liczone są od 1.
 
-Wskazany **folder** jest przetwarzany w całości: każdy plik osobno, a przy
-łączeniu wszystkie razem, w kolejności alfabetycznej. Jeśli kolejność
-łączenia ma znaczenie, nazwij pliki `01_…`, `02_…`. Przy wyborze kilku
-plików przyciskiem **Pliki…** kolejność ustala okno wyboru.
+Operacja jest wykonywana na **wszystkich plikach z listy**: każdy plik
+osobno, a przy łączeniu wszystkie razem, **w kolejności z listy**.
+Dodany folder trafia na listę jako jego pliki, alfabetycznie.
 
 ### Szczegóły
 
@@ -49,7 +48,7 @@ plików przyciskiem **Pliki…** kolejność ustala okno wyboru.
 2. **Program** — na stronie [github.com/DawidBochno/Narzedzia-PDF](https://github.com/DawidBochno/Narzedzia-PDF)
    kliknij zielony przycisk **Code → Download ZIP**. Rozpakuj archiwum,
    np. do `C:\Programy\Narzedzia PDF`. Nie uruchamiaj programu z wnętrza ZIP-a.
-3. Kliknij dwukrotnie **`install.bat`**. Instaluje bibliotekę `PyMuPDF` (potrzebny internet) i uruchamia test. Na końcu pojawia się
+3. Kliknij dwukrotnie **`install.bat`**. Instaluje biblioteki `PyMuPDF` i `tkinterdnd2` (potrzebny internet) i uruchamia test. Na końcu pojawia się
    **„selftest OK”**, co znaczy, że wszystko działa.
    Jeśli Windows pokaże „System Windows ochronił ten komputer”, kliknij
    **Więcej informacji → Uruchom mimo to**.
@@ -61,13 +60,22 @@ plików przyciskiem **Pliki…** kolejność ustala okno wyboru.
 
 1. Uruchom `uruchom.bat`.
 2. **Operacja** — wybierz z listy, co zrobić (tabela [Operacje](#operacje)).
-3. **Pliki lub folder** — **Pliki…** pozwala zaznaczyć kilka plików
-   naraz (z Ctrl), **Folder…** bierze wszystkie pliki z folderu.
+3. **Pliki** — przeciągnij pliki lub foldery z Eksploratora na listę
+   albo użyj **Dodaj pliki…** / **Dodaj folder…**. Pliki leżące
+   w folderze `INPUT` są na liście od razu po uruchomieniu. Przy każdym
+   pliku widać liczbę stron, a pod listą sumę.
+   - **Kolejność** (ważna przy łączeniu): przeciągnij wiersz myszą albo
+     zaznacz pliki i użyj **W górę** / **W dół**; **Sortuj A-Z** układa
+     alfabetycznie.
+   - **Usuń z listy** (lub klawisz Delete) i **Wyczyść listę** nie
+     kasują plików z dysku.
+   - Dwuklik na pliku otwiera go do podglądu.
 4. **Strony** i **Wartość** — wypełnij, jeśli operacja ich potrzebuje,
    np. `1-3,5` przy wyborze stron albo `90` przy obracaniu. Puste pole
    oznacza wartość domyślną.
 5. Kliknij **Wykonaj**. Wyniki trafiają do folderu wyjściowego
-   (domyślnie `OUTPUT`), a oryginały zostają bez zmian.
+   (domyślnie `OUTPUT`), a oryginały zostają bez zmian. Przycisk
+   **Otwórz folder wyników** otwiera ten folder w Eksploratorze.
 
 ## Aktualizacje
 

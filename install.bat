@@ -18,7 +18,7 @@ echo === Python ===
 %PY% --version
 
 echo.
-echo === Instalacja bibliotek (PyMuPDF) ===
+echo === Instalacja bibliotek (PyMuPDF, tkinterdnd2) ===
 %PY% -m pip install --upgrade pip
 %PY% -m pip install --upgrade -r requirements.txt
 if errorlevel 1 (

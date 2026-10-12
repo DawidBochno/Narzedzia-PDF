@@ -97,7 +97,12 @@ def op_merge(files, out_dir, pages, value, log):
         out.insert_pdf(src)
         log("  + %s (%d str.)" % (os.path.basename(f), len(src)))
         src.close()
-    return [_save(out, os.path.join(out_dir, "polaczony_%s.pdf" % time.strftime("%Y%m%d_%H%M%S")))]
+    name = re.sub(r'[\\/:*?"<>|]', "_", re.sub(r"(?i)\.pdf$", "", value)).strip(" .")
+    name = name or "polaczony_%s" % time.strftime("%Y%m%d_%H%M%S")
+    dst, k = os.path.join(out_dir, name + ".pdf"), 2
+    while os.path.exists(dst):  # nazwa od uzytkownika - nie nadpisywac (np. oryginalu w tym samym folderze)
+        dst, k = os.path.join(out_dir, "%s_%d.pdf" % (name, k)), k + 1
+    return [_save(out, dst)]
 
 
 def op_split(f, out_dir, pages, value, log):
@@ -195,7 +200,7 @@ def op_watermark(f, out_dir, pages, value, log):
 
 # nazwa: (funkcja, czy laczy wiele plikow, podpowiedz "Strony", podpowiedz "Wartosc")
 OPS = {
-    "Polacz (PDF, JPG, PNG)": (op_merge, True, "-", "-"),
+    "Polacz (PDF, JPG, PNG)": (op_merge, True, "-", "nazwa pliku wynikowego (puste = polaczony_data_godzina)"),
     "Podziel": (op_split, False, "np. 1-3,4-6 (puste = kazda strona osobno)", "-"),
     "Wybierz strony": (op_select, False, "np. 1,3,5-7 (w podanej kolejnosci)", "-"),
     "Usun strony": (op_delete, False, "np. 2,5-6", "-"),
@@ -207,14 +212,25 @@ OPS = {
 
 
 def list_inputs(inp, merge):
-    if isinstance(inp, (list, tuple)):
-        files = list(inp)
-    elif os.path.isdir(inp):
-        exts = (".pdf",) + (IMAGES if merge else ())
-        files = sorted(os.path.join(inp, f) for f in os.listdir(inp) if f.lower().endswith(exts))
-    else:
-        files = [inp]
+    """Plik, folder albo lista plikow/folderow -> lista plikow (folder: alfabetycznie)."""
+    exts = (".pdf",) + (IMAGES if merge else ())
+    files = []
+    for p in inp if isinstance(inp, (list, tuple)) else [inp]:
+        if os.path.isdir(p):
+            files += sorted(os.path.join(p, f) for f in os.listdir(p) if f.lower().endswith(exts))
+        else:
+            files.append(p)
     return files
+
+
+def page_count(path):
+    try:
+        doc = _open(path)
+    except Exception:
+        return "?"
+    n = len(doc)
+    doc.close()
+    return n
 
 
 def run(op, inp, out_dir, pages="", value="", log=print):
@@ -246,41 +262,129 @@ def gui():
     import tkinter as tk
     from tkinter import filedialog, ttk, scrolledtext
 
-    root = tk.Tk()
+    try:  # przeciaganie plikow z Eksploratora; bez biblioteki program dziala, tylko bez tego
+        from tkinterdnd2 import TkinterDnD, DND_FILES
+        root = TkinterDnD.Tk()
+    except ImportError:
+        root, DND_FILES = tk.Tk(), None
     root.title("Narzedzia PDF")
-    root.geometry("800x560")
+    root.geometry("820x700")
     pad = dict(padx=6, pady=3)
 
     v_op = tk.StringVar(value=next(iter(OPS)))
-    v_in = tk.StringVar(value=os.path.join(APP_DIR, "INPUT"))
     v_out = tk.StringVar(value=os.path.join(APP_DIR, "OUTPUT"))
     v_pages, v_value = tk.StringVar(), tk.StringVar()
-    picked = []  # pliki wybrane przyciskiem "Pliki..." (zachowana kolejnosc)
+    items, counts = [], {}  # pliki na liscie (kolejnosc = kolejnosc laczenia), liczba stron
+
+    top = ttk.Frame(root)
+    top.pack(fill="x", **pad)
+    ttk.Label(top, text="Operacja:").pack(side="left", **pad)
+    ttk.Combobox(top, textvariable=v_op, values=list(OPS), state="readonly",
+                 width=30).pack(side="left", **pad)
+
+    lf = ttk.LabelFrame(root, text="Pliki - " + ("przeciagnij tutaj pliki lub foldery. " if DND_FILES else "")
+                        + "Kolejnosc na liscie = kolejnosc laczenia (przeciagnij wiersz mysza albo W gore / W dol)")
+    lf.pack(fill="both", expand=True, **pad)
+    lb = tk.Listbox(lf, selectmode="extended", height=10, activestyle="none")
+    sb = ttk.Scrollbar(lf, command=lb.yview)
+    lb.config(yscrollcommand=sb.set)
+    lb.pack(side="left", fill="both", expand=True, padx=(6, 0), pady=6)
+    sb.pack(side="left", fill="y", pady=6)
+    side = ttk.Frame(lf)
+    side.pack(side="left", fill="y", padx=6, pady=6)
+    status = ttk.Label(root, foreground="#666")
+
+    def refresh(select=()):
+        lb.delete(0, "end")
+        for i, p in enumerate(items, 1):
+            lb.insert("end", "%2d.  %s   (%s str.)" % (i, os.path.basename(p), counts[p]))
+        for i in select:
+            lb.selection_set(i)
+        if select:
+            lb.see(select[0])
+        total = sum(c for c in counts.values() if c != "?")
+        status.config(text="Plikow: %d, stron razem: %d" % (len(items), total) if items else
+                      "Lista jest pusta - dodaj pliki przyciskiem lub przeciagnij je na liste.")
+
+    def add(paths):
+        skipped = []
+        for p in map(os.path.normpath, list_inputs(list(paths), True)):
+            if not p.lower().endswith((".pdf",) + IMAGES):
+                skipped.append(os.path.basename(p))
+            elif p not in counts:
+                items.append(p)
+                counts[p] = 1 if p.lower().endswith(IMAGES) else page_count(p)
+        if skipped:
+            log("Pominieto (to nie PDF ani obraz): " + ", ".join(skipped))
+        refresh()
+
+    def move(d):
+        sel = list(lb.curselection())
+        if not sel or sel[0] + d < 0 or sel[-1] + d >= len(items):
+            return
+        for i in sel if d < 0 else reversed(sel):
+            items[i + d], items[i] = items[i], items[i + d]
+        refresh([i + d for i in sel])
+
+    def remove(*_):
+        for i in reversed(lb.curselection()):
+            counts.pop(items.pop(i))
+        refresh()
+
+    def clear():
+        items.clear()
+        counts.clear()
+        refresh()
+
+    def sort_az():
+        items.sort(key=lambda p: os.path.basename(p).lower())
+        refresh()
+
+    drag = {}
+
+    def on_press(e):
+        i = lb.nearest(e.y)
+        box = lb.bbox(i) if items else None
+        drag["i"] = i if box and e.y < box[1] + box[3] else None  # klik w pusta czesc listy - nic
+
+    def on_motion(e):  # przeciaganie wiersza zmienia kolejnosc
+        i, j = drag.get("i"), lb.nearest(e.y)
+        if i is not None and items and j != i:
+            items.insert(j, items.pop(i))
+            refresh([j])
+            drag["i"] = j
+        return "break"
+
+    def open_item(e):
+        i = lb.nearest(e.y)
+        if items and hasattr(os, "startfile"):
+            os.startfile(items[i])
+
+    lb.bind("<Button-1>", on_press)
+    lb.bind("<B1-Motion>", on_motion)
+    lb.bind("<Double-Button-1>", open_item)
+    lb.bind("<Delete>", remove)
+    if DND_FILES:
+        for w in (lb, lf):
+            w.drop_target_register(DND_FILES)
+            w.dnd_bind("<<Drop>>", lambda e: add(root.tk.splitlist(e.data)))
+
+    types = [("PDF i obrazy", "*.pdf *.jpg *.jpeg *.png *.bmp *.tif *.tiff")]
+    in_dir = os.path.join(APP_DIR, "INPUT")
+    for text, cmd in (("Dodaj pliki...", lambda: add(filedialog.askopenfilenames(filetypes=types, initialdir=in_dir))),
+                      ("Dodaj folder...", lambda: add([d] if (d := filedialog.askdirectory(initialdir=in_dir)) else [])),
+                      (None, None),
+                      ("W gore", lambda: move(-1)), ("W dol", lambda: move(1)), ("Sortuj A-Z", sort_az),
+                      (None, None),
+                      ("Usun z listy", remove), ("Wyczysc liste", clear)):
+        if text:
+            ttk.Button(side, text=text, command=cmd, width=16).pack(pady=2)
+        else:
+            ttk.Separator(side).pack(fill="x", pady=6)
+    status.pack(anchor="w", padx=12)
 
     f = ttk.Frame(root)
     f.pack(fill="x", **pad)
-    ttk.Label(f, text="Operacja:").grid(row=0, column=0, sticky="w", **pad)
-    ttk.Combobox(f, textvariable=v_op, values=list(OPS), state="readonly",
-                 width=30).grid(row=0, column=1, sticky="w", **pad)
-
-    def pick_files():
-        fs = filedialog.askopenfilenames(filetypes=[("PDF i obrazy", "*.pdf *.jpg *.jpeg *.png *.bmp *.tif *.tiff")])
-        if fs:
-            picked[:] = fs
-            v_in.set(" | ".join(os.path.basename(x) for x in fs))
-
-    def pick_dir():
-        d = filedialog.askdirectory()
-        if d:
-            picked.clear()
-            v_in.set(d)
-
-    ttk.Label(f, text="Pliki lub folder:").grid(row=1, column=0, sticky="w", **pad)
-    e_in = ttk.Entry(f, textvariable=v_in, width=62)
-    e_in.grid(row=1, column=1, **pad)
-    e_in.bind("<Key>", lambda e: picked.clear())
-    ttk.Button(f, text="Pliki...", command=pick_files).grid(row=1, column=2, **pad)
-    ttk.Button(f, text="Folder...", command=pick_dir).grid(row=1, column=3, **pad)
     ttk.Label(f, text="Folder wyjsciowy:").grid(row=2, column=0, sticky="w", **pad)
     ttk.Entry(f, textvariable=v_out, width=62).grid(row=2, column=1, **pad)
     ttk.Button(f, text="Wybierz...", command=lambda: v_out.set(
@@ -303,11 +407,25 @@ def gui():
         h_value.config(text=hv)
         e_pages.config(state="disabled" if hp == "-" else "normal")
         e_value.config(state="disabled" if hv == "-" else "normal")
+        v_value.set("")  # np. kat 90 z Obroc nie moze zostac nazwa pliku przy Polacz
 
     v_op.trace_add("write", on_op)
     on_op()
 
-    log_box = scrolledtext.ScrolledText(root, height=14)
+    bar = ttk.Frame(root)
+    bar.pack(pady=6)
+    btn = ttk.Button(bar, text="Wykonaj")
+    btn.pack(side="left", padx=6)
+
+    def open_out():
+        out = v_out.get().strip('" ')
+        if out and hasattr(os, "startfile"):
+            os.makedirs(out, exist_ok=True)
+            os.startfile(out)
+
+    ttk.Button(bar, text="Otworz folder wynikow", command=open_out).pack(side="left", padx=6)
+
+    log_box = scrolledtext.ScrolledText(root, height=8)
     log_box.pack(fill="both", expand=True, **pad)
 
     def log(msg):
@@ -316,14 +434,11 @@ def gui():
             log_box.see("end")
         root.after(0, put)
 
-    btn = ttk.Button(root, text="Wykonaj")
-    btn.pack(pady=6)
-
     def start():
-        inp = list(picked) or v_in.get().strip('" ')
+        inp = list(items)
         out = v_out.get().strip('" ')
-        if not picked and not os.path.exists(inp):
-            return log("Wskaz istniejacy plik lub folder.")
+        if not inp:
+            return log("Dodaj pliki do listy (przycisk 'Dodaj pliki...' albo przeciagnij je na liste).")
         if not out:
             return log("Wskaz folder wyjsciowy.")
         op = v_op.get()
@@ -342,6 +457,7 @@ def gui():
         threading.Thread(target=work, daemon=True).start()
 
     btn.config(command=start)
+    add([in_dir] if os.path.isdir(in_dir) else [])  # dotychczasowy sposob: pliki wrzucone do INPUT
     if "--selftest" in sys.argv:
         root.after(200, root.destroy)
     import aktualizacja
@@ -386,6 +502,13 @@ def selftest():
 
     r = run("Polacz (PDF, JPG, PNG)", [src, img], out, log=quiet)
     assert len(pages_of(r[0])) == 6
+    # kolejnosc z listy, nazwa z pola Wartosc (bez niedozwolonych znakow), folder na liscie rozwiniety
+    r = run("Polacz (PDF, JPG, PNG)", [img, src], out, value="umowa: skan.pdf", log=quiet)
+    assert os.path.basename(r[0]) == "umowa_ skan.pdf" and pages_of(r[0])[1].strip() == "Tresc strony 1"
+    r2 = run("Polacz (PDF, JPG, PNG)", [src], out, value="umowa: skan", log=quiet)
+    assert os.path.basename(r2[0]) == "umowa_ skan_2.pdf", r2
+    assert list_inputs([img, tmp], True) == [img, src, img] and list_inputs(tmp, False) == [src]
+    assert page_count(src) == 5 and page_count(os.path.join(tmp, "brak.pdf")) == "?"
     r = run("Podziel", src, out, "1-2,3-5", log=quiet)
     assert [len(pages_of(x)) for x in r] == [2, 3] and r[1].endswith("_str3-5.pdf")
     r = run("Wybierz strony", src, out, "5,1", log=quiet)
