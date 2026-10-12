@@ -99,7 +99,10 @@ def op_merge(files, out_dir, pages, value, log):
         src.close()
     name = re.sub(r'[\\/:*?"<>|]', "_", re.sub(r"(?i)\.pdf$", "", value)).strip(" .")
     name = name or "polaczony_%s" % time.strftime("%Y%m%d_%H%M%S")
-    return [_save(out, os.path.join(out_dir, name + ".pdf"))]
+    dst, k = os.path.join(out_dir, name + ".pdf"), 2
+    while os.path.exists(dst):  # nazwa od uzytkownika - nie nadpisywac (np. oryginalu w tym samym folderze)
+        dst, k = os.path.join(out_dir, "%s_%d.pdf" % (name, k)), k + 1
+    return [_save(out, dst)]
 
 
 def op_split(f, out_dir, pages, value, log):
@@ -305,7 +308,7 @@ def gui():
 
     def add(paths):
         skipped = []
-        for p in list_inputs(list(paths), True):
+        for p in map(os.path.normpath, list_inputs(list(paths), True)):
             if not p.lower().endswith((".pdf",) + IMAGES):
                 skipped.append(os.path.basename(p))
             elif p not in counts:
@@ -340,7 +343,9 @@ def gui():
     drag = {}
 
     def on_press(e):
-        drag["i"] = lb.nearest(e.y)
+        i = lb.nearest(e.y)
+        box = lb.bbox(i) if items else None
+        drag["i"] = i if box and e.y < box[1] + box[3] else None  # klik w pusta czesc listy - nic
 
     def on_motion(e):  # przeciaganie wiersza zmienia kolejnosc
         i, j = drag.get("i"), lb.nearest(e.y)
@@ -500,6 +505,8 @@ def selftest():
     # kolejnosc z listy, nazwa z pola Wartosc (bez niedozwolonych znakow), folder na liscie rozwiniety
     r = run("Polacz (PDF, JPG, PNG)", [img, src], out, value="umowa: skan.pdf", log=quiet)
     assert os.path.basename(r[0]) == "umowa_ skan.pdf" and pages_of(r[0])[1].strip() == "Tresc strony 1"
+    r2 = run("Polacz (PDF, JPG, PNG)", [src], out, value="umowa: skan", log=quiet)
+    assert os.path.basename(r2[0]) == "umowa_ skan_2.pdf", r2
     assert list_inputs([img, tmp], True) == [img, src, img] and list_inputs(tmp, False) == [src]
     assert page_count(src) == 5 and page_count(os.path.join(tmp, "brak.pdf")) == "?"
     r = run("Podziel", src, out, "1-2,3-5", log=quiet)
