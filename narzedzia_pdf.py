@@ -621,11 +621,12 @@ def gui():
 
     def on_op(*_):
         _, _, hp, hv = OPS[v_op.get()]
+        if str(h_value.cget("text")) != hv:  # inne znaczenie pola: np. kat 90 z Obroc nie moze zostac nazwa pliku
+            v_value.set("")
         h_pages.config(text=hp)
         h_value.config(text=hv)
         e_pages.config(state="disabled" if hp == "-" else "normal")
         e_value.config(state="disabled" if hv == "-" else "normal")
-        v_value.set("")  # np. kat 90 z Obroc nie moze zostac nazwa pliku przy Polacz
 
     v_op.trace_add("write", on_op)
     on_op()
