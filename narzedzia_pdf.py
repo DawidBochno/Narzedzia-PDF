@@ -238,6 +238,8 @@ def page_count(path):
 
 def signed(path):
     """Czy PDF ma zlozony podpis elektroniczny (puste pole podpisu sie nie liczy)."""
+    if path.lower().endswith(IMAGES):  # obraz nie ma podpisu - bez kosztownej konwersji
+        return False
     try:
         doc = _open(path)
     except Exception:
