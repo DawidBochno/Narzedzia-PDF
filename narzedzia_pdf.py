@@ -7,6 +7,7 @@ Uruchomienie: python narzedzia_pdf.py            (GUI)
               python narzedzia_pdf.py --selftest (test logiki)
 """
 import base64
+import hashlib
 import json
 import os
 import re
@@ -185,6 +186,49 @@ def op_number(f, out_dir, pages, value, log):
     return [_save(src, _out(out_dir, f, "_numerowany"))]
 
 
+def op_show_sigs(f, out_dir, pages, value, log):
+    sigs = signatures(f)
+    if not sigs:
+        log("  brak podpisow elektronicznych")
+    for k, s in enumerate(sigs, 1):
+        who = s.get("kto") or "?"
+        log("  [%d] %s%s" % (k, who, " (wystawca: %s)" % s["wystawca"] if s.get("wystawca") else ""))
+        log("      pole \"%s\", strona %d%s%s" % (s["pole"], s["strona"], ", data: " + s["kiedy"] if s.get("kiedy") else "",
+                                              ", format: " + s["format"] if s["format"] else ""))
+        for key, label in (("powod", "powod"), ("miejsce", "miejsce"), ("cert_do", "certyfikat wazny do")):
+            if s.get(key):
+                log("      %s: %s" % (label, s[key]))
+        if "skrot_ok" in s:
+            log("      tresc podpisana: " + ("NIEZMIENIONA (skrot zgodny)" if s["skrot_ok"] else
+                                            "ZMIENIONA - skrot niezgodny, podpis NIEWAZNY"))
+        if s.get("caly_plik") is False:
+            log("      po podpisaniu do pliku dopisano zmiany (podpis dotyczy wczesniejszej wersji dokumentu)")
+    if sigs:
+        log("  Zaufania i waznosci certyfikatu program nie sprawdza - do tego sluzy walidator (np. gov.pl).")
+    return []
+
+
+def op_unsign(f, out_dir, pages, value, log):
+    import pymupdf
+    src = _open(f)
+    n = 0
+    for page in src:
+        while True:  # usuwanie w trakcie iteracji widgets() psuje iterator - zawsze pierwszy od nowa
+            w = next(page.widgets(types=[pymupdf.PDF_WIDGET_TYPE_SIGNATURE]), None)
+            if not w:
+                break
+            page.delete_widget(w)
+            n += 1
+    if not n:
+        src.close()
+        raise ValueError("brak podpisow w pliku")
+    cat = src.pdf_catalog()
+    for key in ("DSS", "Perms", "AcroForm/SigFlags"):  # dane walidacji (LTV), certyfikacja DocMDP, flaga podpisu
+        src.xref_set_key(cat, key, "null")
+    log("  usunieto pol podpisu: %d" % n)
+    return [_save(src, _out(out_dir, f, "_bez_podpisow"))]
+
+
 def op_watermark(f, out_dir, pages, value, log):
     import pymupdf
     text = value or "KOPIA"
@@ -211,6 +255,8 @@ OPS = {
     "Kompresuj": (op_compress, False, "-", "jakosc JPEG 1-100 (domyslnie 60)"),
     "Numeruj strony": (op_number, False, "puste = wszystkie", "format, domyslnie: Strona {n} z {N}"),
     "Znak wodny": (op_watermark, False, "puste = wszystkie", "tekst, domyslnie: KOPIA"),
+    "Wyswietl podpisy": (op_show_sigs, False, "-", "-"),
+    "Usun podpisy": (op_unsign, False, "-", "-"),
 }
 
 
@@ -246,6 +292,82 @@ def signed(path):
         return False
     import pymupdf
     res = any(w.is_signed for page in doc for w in page.widgets(types=[pymupdf.PDF_WIDGET_TYPE_SIGNATURE]))
+    doc.close()
+    return res
+
+
+def _cms(der, signed_data):
+    """Podpisujacy, wystawca, data i zgodnosc skrotu z podpisu CMS (bez sprawdzania zaufania)."""
+    try:
+        from asn1crypto import cms
+    except ImportError:
+        return {"kto": "? (brak biblioteki asn1crypto - uruchom install.bat)"}
+    try:
+        sd = cms.ContentInfo.load(der)["content"]
+        si = sd["signer_infos"][0]
+        sid = si["sid"]
+        certs = [c.chosen for c in sd["certificates"] if c.name == "certificate"]
+        if sid.name == "issuer_and_serial_number":
+            cert = next((c for c in certs if c.serial_number == sid.chosen["serial_number"].native), None)
+        else:
+            cert = next((c for c in certs if c.key_identifier == sid.chosen.native), None)
+        attrs = {a["type"].native: a["values"][0].native for a in si["signed_attrs"]}
+        res = {"skrot_ok": attrs.get("message_digest") == hashlib.new(
+            si["digest_algorithm"]["algorithm"].native, signed_data).digest()}
+        if attrs.get("signing_time"):
+            res["kiedy"] = attrs["signing_time"].astimezone().strftime("%Y-%m-%d %H:%M")
+        if cert:
+            s, i = cert.subject.native, cert.issuer.native
+            res["kto"] = s.get("common_name") or cert.subject.human_friendly
+            res["wystawca"] = i.get("common_name") or i.get("organization_name") or cert.issuer.human_friendly
+            res["cert_do"] = cert["tbs_certificate"]["validity"]["not_after"].native.strftime("%Y-%m-%d")
+        return res
+    except Exception as e:
+        return {"kto": "? (nie udalo sie odczytac podpisu: %s)" % e}
+
+
+def signatures(path):
+    """Zlozone podpisy w PDF: pole, strona, podpisujacy, data, czy obejmuje caly plik, zgodnosc skrotu."""
+    import pymupdf
+    if path.lower().endswith(IMAGES):
+        return []
+    with open(path, "rb") as fh:
+        data = fh.read()
+    doc = _open(path)
+    res = []
+    for page in doc:
+        for w in page.widgets(types=[pymupdf.PDF_WIDGET_TYPE_SIGNATURE]):
+            if not w.is_signed:
+                continue
+            v = "V" if doc.xref_get_key(w.xref, "V")[0] != "null" else "Parent/V"
+
+            def get(key):
+                t, val = doc.xref_get_key(w.xref, v + "/" + key)
+                return "" if t == "null" else val.lstrip("/")
+
+            s = {"pole": w.field_name, "strona": page.number + 1, "format": get("SubFilter"),
+                 "powod": get("Reason"), "miejsce": get("Location"), "kto": get("Name")}
+            m = re.match(r"D:(\d{4})(\d\d)(\d\d)(\d\d)(\d\d)", get("M"))
+            if m:
+                s["kiedy"] = "%s-%s-%s %s:%s" % m.groups()
+            # wartosc podpisu ze slownika (xref_get_key zwraca ja jako tekst, nie bajty) - nie z pliku:
+            # po przerobieniu pliku ByteRange moze wskazywac cudzy podpis
+            t, val = doc.xref_get_key(w.xref, v)
+            obj = doc.xref_object(int(val.split()[0]), compressed=True) if t == "xref" else val
+            hexv = re.search(r"/Contents\s*<([0-9A-Fa-f\s]*)>", obj)
+            try:
+                a, b, c, n = (int(x) for x in get("ByteRange").strip("[]").split())
+                hexv = re.sub(r"\s", "", hexv.group(1))
+            except (ValueError, AttributeError):
+                s["kto"] = s["kto"] or "? (uszkodzony slownik podpisu)"
+                res.append(s)
+                continue
+            s["caly_plik"] = c + n == len(data)
+            s.update({k: x for k, x in _cms(bytes.fromhex(hexv), data[a:a + b] + data[c:c + n]).items()
+                      if x not in (None, "")})
+            if data[a + b:c].strip(b"<>").decode("latin-1").lower() != hexv.lower():
+                s["skrot_ok"] = False  # podpis nie lezy tam, gdzie wskazuje ByteRange - plik przerobiony
+            res.append(s)
     doc.close()
     return res
 
@@ -290,7 +412,7 @@ def run(op, inp, out_dir, pages="", value="", log=print):
         log("Brak plikow do przetworzenia.")
         return []
     os.makedirs(out_dir, exist_ok=True)
-    sig = [os.path.basename(f) for f in files if signed(f)]
+    sig = [os.path.basename(f) for f in files if func not in (op_show_sigs, op_unsign) and signed(f)]
     if sig:
         log(SIGN_WARN % ", ".join(sig))
     jobs = [files] if merge else files
@@ -646,6 +768,21 @@ def selftest():
     msgs = []
     run("Obroc", os.path.join(tmp, "pole.pdf"), out, log=msgs.append)
     assert not any("UWAGA" in m for m in msgs), msgs
+    assert signatures(os.path.join(tmp, "podpisany.pdf"))[0]["kto"].startswith("?")  # smieci zamiast CMS
+    # prawdziwy podpis PAdES (fikcyjny certyfikat): odczyt, uniewaznienie przez laczenie, usuniecie
+    ex = os.path.join(APP_DIR, "przyklad", "podpisany_przyklad.pdf")
+    s = signatures(ex)
+    assert len(s) == 1 and s[0]["kto"] == "Jan Testowy (fikcyjny)" and s[0]["skrot_ok"] and s[0]["caly_plik"], s
+    assert s[0]["wystawca"] == "Testowe CA (fikcyjne)" and s[0]["powod"] == "Akceptacja dokumentu", s
+    r = run("Polacz (PDF, JPG, PNG)", [src, ex], out, log=quiet)
+    s = signatures(r[0])
+    assert len(s) == 1 and s[0]["strona"] == 6 and s[0]["skrot_ok"] is False, s
+    msgs = []
+    assert run("Wyswietl podpisy", [ex, src], out, log=msgs.append) == []
+    text = "\n".join(msgs)
+    assert "NIEZMIENIONA" in text and "brak podpisow" in text and "UWAGA" not in text, text
+    r = run("Usun podpisy", [r[0], src], out, log=quiet)
+    assert len(r) == 1 and signatures(r[0]) == [] and not signed(r[0]) and len(pages_of(r[0])) == 6
     png = thumbnail(src)
     pix = pymupdf.Pixmap(png)
     assert png[:8] == b"\x89PNG\r\n\x1a\n" and max(pix.width, pix.height) == 220

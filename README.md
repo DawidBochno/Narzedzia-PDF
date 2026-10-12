@@ -18,6 +18,8 @@ których trafiają dokumenty z danymi osobowymi.
 | **Kompresuj** | – | jakość JPEG 1–100 (domyślnie 60) | `nazwa_skompresowany.pdf` |
 | **Numeruj strony** | puste = wszystkie | format, domyślnie `Strona {n} z {N}` | `nazwa_numerowany.pdf` |
 | **Znak wodny** | puste = wszystkie | tekst, domyślnie `KOPIA` | `nazwa_znak_wodny.pdf` |
+| **Wyświetl podpisy** | – | – | lista podpisów w oknie (bez pliku) |
+| **Usuń podpisy** | – | – | `nazwa_bez_podpisow.pdf` |
 
 Zakresy stron: `1-3` (od 1 do 3), `5` (jedna strona), `8-` (od 8 do końca),
 `-4` (od początku do 4), łączone przecinkiem. Strony liczone są od 1.
@@ -36,6 +38,16 @@ Dodany folder trafia na listę jako jego pliki, alfabetycznie.
   zmian.
 - **Numeracja i znak wodny** obsługują polskie znaki (czcionka Arial
   z Windows) i poprawnie układają się na stronach obróconych i poziomych.
+- **Wyświetl podpisy** pokazuje dla każdego podpisu elektronicznego:
+  podpisującego i wystawcę certyfikatu, datę, stronę, powód, ważność
+  certyfikatu oraz to, czy podpisana treść jest **niezmieniona** (skrót
+  zgodny) i czy po podpisaniu coś dopisano do pliku. Zaufania do
+  certyfikatu program nie sprawdza, do tego służy walidator (np. na
+  gov.pl). Do wypróbowania: `przyklad/podpisany_przyklad.pdf` (podpis
+  fikcyjny, z certyfikatem testowym).
+- **Usuń podpisy** usuwa pola podpisu (razem z ich widocznym wyglądem)
+  i dane walidacyjne. Przydaje się po połączeniu podpisanych plików:
+  walidator pokaże wtedy dokument bez podpisu zamiast podpisu nieważnego.
 - **Oryginały nigdy nie są zmieniane.** Wyniki trafiają do folderu
   wyjściowego.
 
@@ -48,7 +60,7 @@ Dodany folder trafia na listę jako jego pliki, alfabetycznie.
 2. **Program** — na stronie [github.com/DawidBochno/Narzedzia-PDF](https://github.com/DawidBochno/Narzedzia-PDF)
    kliknij zielony przycisk **Code → Download ZIP**. Rozpakuj archiwum,
    np. do `C:\Programy\Narzedzia PDF`. Nie uruchamiaj programu z wnętrza ZIP-a.
-3. Kliknij dwukrotnie **`install.bat`**. Instaluje biblioteki `PyMuPDF` i `tkinterdnd2` (potrzebny internet) i uruchamia test. Na końcu pojawia się
+3. Kliknij dwukrotnie **`install.bat`**. Instaluje biblioteki `PyMuPDF`, `tkinterdnd2` i `asn1crypto` (potrzebny internet) i uruchamia test. Na końcu pojawia się
    **„selftest OK”**, co znaczy, że wszystko działa.
    Jeśli Windows pokaże „System Windows ochronił ten komputer”, kliknij
    **Więcej informacji → Uruchom mimo to**.
@@ -106,7 +118,8 @@ o to poprosi, uruchom też raz `install.bat` (zmieniły się biblioteki).
   jako nieważny. Tak działa każdy program, nie tylko ten. Program
   oznacza podpisane pliki na liście (`PODPISANY`) i ostrzega w logu.
   Podpisane dokumenty przekazuj w oryginale (osobno), a jeśli potrzebny
-  jest jeden plik, podpisz wynik ponownie.
+  jest jeden plik, podpisz wynik ponownie. Czy podpis w danym pliku
+  jest jeszcze nienaruszony, sprawdzisz operacją **Wyświetl podpisy**.
 - PDF zabezpieczony hasłem trzeba najpierw odbezpieczyć.
 - Kompresja nie zmniejszy PDF-ów zawierających sam tekst, bez obrazów,
   bo nie ma w nich czego zmniejszać.
