@@ -100,6 +100,13 @@ o to poprosi, uruchom też raz `install.bat` (zmieniły się biblioteki).
 
 ## Ograniczenia
 
+- **Podpis elektroniczny (kwalifikowany, zaufany, osobisty) nie przetrwa
+  żadnej operacji.** Podpis obejmuje dokładnie ten plik, bajt po bajcie,
+  więc po połączeniu, obróceniu, numeracji itd. walidator pokaże podpis
+  jako nieważny. Tak działa każdy program, nie tylko ten. Program
+  oznacza podpisane pliki na liście (`PODPISANY`) i ostrzega w logu.
+  Podpisane dokumenty przekazuj w oryginale (osobno), a jeśli potrzebny
+  jest jeden plik, podpisz wynik ponownie.
 - PDF zabezpieczony hasłem trzeba najpierw odbezpieczyć.
 - Kompresja nie zmniejszy PDF-ów zawierających sam tekst, bez obrazów,
   bo nie ma w nich czego zmniejszać.

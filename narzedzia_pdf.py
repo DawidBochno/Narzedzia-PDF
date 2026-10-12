@@ -236,6 +236,24 @@ def page_count(path):
     return n
 
 
+def signed(path):
+    """Czy PDF ma zlozony podpis elektroniczny (puste pole podpisu sie nie liczy)."""
+    try:
+        doc = _open(path)
+    except Exception:
+        return False
+    import pymupdf
+    res = any(w.is_signed for page in doc for w in page.widgets(types=[pymupdf.PDF_WIDGET_TYPE_SIGNATURE]))
+    doc.close()
+    return res
+
+
+SIGN_WARN = ("UWAGA: pliki z podpisem elektronicznym: %s\n"
+             "  Podpis obejmuje dokladnie ten plik - po kazdej zmianie (laczenie, obracanie, numeracja...)\n"
+             "  podpis w wyniku NIE BEDZIE WAZNY. Podpisane dokumenty przekaz w oryginale (osobno)\n"
+             "  albo podpisz wynik ponownie.")
+
+
 def thumbnail(path, size=220):
     """PNG pierwszej strony, dluzszy bok = size px (podglad w oknie)."""
     import pymupdf
@@ -270,6 +288,9 @@ def run(op, inp, out_dir, pages="", value="", log=print):
         log("Brak plikow do przetworzenia.")
         return []
     os.makedirs(out_dir, exist_ok=True)
+    sig = [os.path.basename(f) for f in files if signed(f)]
+    if sig:
+        log(SIGN_WARN % ", ".join(sig))
     jobs = [files] if merge else files
     res = []
     for job in jobs:
@@ -306,7 +327,7 @@ def gui():
     out_default = os.path.join(APP_DIR, "OUTPUT")
     v_out = tk.StringVar(value=cfg.get("out") or out_default)
     v_pages, v_value = tk.StringVar(), tk.StringVar()
-    items, counts = [], {}  # pliki na liscie (kolejnosc = kolejnosc laczenia), liczba stron
+    items, counts, sigs = [], {}, set()  # pliki na liscie (kolejnosc = kolejnosc laczenia), liczba stron
 
     top = ttk.Frame(root)
     top.pack(fill="x", **pad)
@@ -347,14 +368,20 @@ def gui():
     def refresh(select=()):
         lb.delete(0, "end")
         for i, p in enumerate(items, 1):
-            lb.insert("end", "%2d.  %s   (%s str.)" % (i, os.path.basename(p), counts[p]))
+            lb.insert("end", "%2d.  %s   (%s str.%s)" % (i, os.path.basename(p), counts[p],
+                                                        ", PODPISANY" if p in sigs else ""))
         for i in select:
             lb.selection_set(i)
         if select:
             lb.see(select[0])
         total = sum(c for c in counts.values() if c != "?")
+        n_sig = sum(p in sigs for p in items)
         status.config(text="Plikow: %d, stron razem: %d" % (len(items), total) if items else
-                      "Lista jest pusta - dodaj pliki przyciskiem lub przeciagnij je na liste.")
+                      "Lista jest pusta - dodaj pliki przyciskiem lub przeciagnij je na liste.",
+                      foreground="#666")
+        if n_sig:
+            status.config(text=status.cget("text") + "   |   Podpisane: %d - po zmianie podpis nie bedzie wazny"
+                          % n_sig, foreground="#b35c00")
         show_preview()
 
     def add(paths):
@@ -365,6 +392,8 @@ def gui():
             elif p not in counts:
                 items.append(p)
                 counts[p] = 1 if p.lower().endswith(IMAGES) else page_count(p)
+                if signed(p):
+                    sigs.add(p)
         if skipped:
             log("Pominieto (to nie PDF ani obraz): " + ", ".join(skipped))
         refresh()
@@ -597,6 +626,24 @@ def selftest():
     msgs = []
     r2 = run("Kompresuj", r[0], os.path.join(out, "2"), log=msgs.append)
     assert len(r2) == 1 and "zapisano kopie bez zmian" in "".join(msgs), msgs
+    # podpis: zlozony -> ostrzezenie przy kazdej operacji; puste pole podpisu -> bez ostrzezenia
+    for name, value in (("podpisany.pdf", "<</Type/Sig/Filter/Adobe.PPKLite/ByteRange[0 0 0 0]/Contents<00>>>"),
+                        ("pole.pdf", None)):
+        d = pymupdf.open()
+        w = pymupdf.Widget()
+        w.field_type, w.field_name, w.rect = pymupdf.PDF_WIDGET_TYPE_SIGNATURE, "Podpis", pymupdf.Rect(50, 50, 200, 90)
+        d.new_page().add_widget(w)
+        if value:
+            d.xref_set_key(next(d[0].widgets()).xref, "V", value)
+        d.save(os.path.join(tmp, name))
+    assert signed(os.path.join(tmp, "podpisany.pdf")) and not signed(os.path.join(tmp, "pole.pdf"))
+    assert not signed(src) and not signed(img)
+    msgs = []
+    run("Polacz (PDF, JPG, PNG)", [src, os.path.join(tmp, "podpisany.pdf")], out, log=msgs.append)
+    assert "podpisem elektronicznym: podpisany.pdf" in msgs[0], msgs
+    msgs = []
+    run("Obroc", os.path.join(tmp, "pole.pdf"), out, log=msgs.append)
+    assert not any("UWAGA" in m for m in msgs), msgs
     png = thumbnail(src)
     pix = pymupdf.Pixmap(png)
     assert png[:8] == b"\x89PNG\r\n\x1a\n" and max(pix.width, pix.height) == 220
