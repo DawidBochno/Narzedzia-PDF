@@ -303,7 +303,8 @@ def gui():
     pad = dict(padx=6, pady=3)
 
     v_op = tk.StringVar(value=cfg.get("op") if cfg.get("op") in OPS else next(iter(OPS)))
-    v_out = tk.StringVar(value=cfg.get("out") or os.path.join(APP_DIR, "OUTPUT"))
+    out_default = os.path.join(APP_DIR, "OUTPUT")
+    v_out = tk.StringVar(value=cfg.get("out") or out_default)
     v_pages, v_value = tk.StringVar(), tk.StringVar()
     items, counts = [], {}  # pliki na liscie (kolejnosc = kolejnosc laczenia), liczba stron
 
@@ -510,8 +511,13 @@ def gui():
     btn.config(command=start)
 
     def on_close():
-        save_settings({"op": v_op.get(), "out": v_out.get(),
-                       "size": "%dx%d" % (root.winfo_width(), root.winfo_height())})
+        out = v_out.get().strip('" ')
+        save_settings({"op": v_op.get(),
+                       # domyslny OUTPUT nie zapisany - po przeniesieniu programu ma wskazywac nowe miejsce
+                       "out": "" if os.path.normpath(out) == os.path.normpath(out_default) else out,
+                       # zminimalizowane/zmaksymalizowane okno - zostaje poprzedni rozmiar
+                       "size": "%dx%d" % (root.winfo_width(), root.winfo_height())
+                       if root.state() == "normal" else cfg.get("size", "1040x720")})
         root.destroy()
 
     root.protocol("WM_DELETE_WINDOW", on_close)
